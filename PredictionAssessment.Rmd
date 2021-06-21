@@ -1,34 +1,19 @@
 ---
 title: "Assessment of Predictive Models"
-author: "www.umich.edu/~philb/BDSI2021/PredictionAssessment.html"
+author: "https://github.com/psboonstra/prediction-lecture"
 date: "BDSI 2021; Univeristy of Michigan"
 geometry: margin=0.5in
 output: 
   ioslides_presentation:
     transition: 0.1
-    css: ~/Desktop/Work/CV/Styles/temp_fancy.css
+    css: temp_fancy_logo_only_first.css
     includes:
-      in_header: ~/Desktop/Work/CV/Styles/slides_header.html
+      in_header: slides_header.html
     incremental: no
     widescreen: true
-  pdf_document:
-    highlight: zenburn
-    includes:
-      in_header: ~/Desktop/Work/CV/Styles/tex_pdf_header.txt
-    keep_tex: yes
-    toc: no
-    fig_caption: false
-    fig_height: 6
-    fig_width: 3
-  beamer_presentation:
-    highlight: zenburn
-    includes:
-      in_header: ~/Desktop/Work/CV/Styles/tex_header.txt
-    keep_tex: yes
-    theme: Pittsburgh
-    toc: no
-    fig_caption: false
-bibliography: ../CV/Styles/References.bib  
+    logo: Biostat-informal.png
+    slide_level: 2
+bibliography: References.bib  
 ---
 
 ```{r setup, include=FALSE}
@@ -56,8 +41,6 @@ cex_scale = 9 * figure_scaler;
 theme_set(theme_bw())
 
 ```
-
-# Assessment of Predictive Models
 
 ## Q: Which puzzle-building strategy is best, and how good is it?
 
@@ -277,6 +260,12 @@ Except for true and null models, all MSPEs increase dramatically
 
 Pruned forward model has smallest MSPE in validation subset
 
+- An aside: even though it has the smallest MSPE, is it still good in an 
+absolute sense?
+
+
+##
+
 Assuming we report pruned forward model as *the* model, is this the MSPE we should expect in the future?
 
 ## Simulation study 
@@ -435,6 +424,7 @@ $1-\hat{\mathrm{spec}}(t)$ for $t\in[0,1]$, where
 *concordance ($c$) index* : $\dfrac{\sum_{i,j:Y_i=0,Y_j=1} 1_{[\hat Y(x_i) < \hat Y(x_j)]} + 0.5\times 1_{[\hat Y(x_i) = \hat Y(x_j)]}}{ \sum_{i,j:Y_i=0,Y_j=1} 1}$
 
 ```{r, cache = TRUE}
+# use pROC package 
 true_training_roc = 
   predict_models %>% 
   filter(training, model_name == "true_probs") %>% 
