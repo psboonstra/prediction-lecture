@@ -1,7 +1,7 @@
 
 
 run_sim = function(seed = NA,
-                   nsim = 2.5e3,
+                   nsim = 2e3,
                    n = 400,
                    p = 15,
                    relative_weights = c(2,1,9)) {
@@ -9,6 +9,7 @@ run_sim = function(seed = NA,
   require(MASS);
   require(tidyverse);
   require(broom);
+  require(glue);
   
   if(!is.na(seed)) {
     set.seed(seed);
@@ -143,7 +144,10 @@ run_sim = function(seed = NA,
     group_by(sim) %>% 
     mutate(ranking = rank(mspe / (!model_name %in% c("(truth)", "null")) / (step == "validation"), ties.method = "random")) %>%
     group_by(sim, model_name) %>%
-    mutate(ranking = min(ranking)) %>%
+    mutate(ranking = 
+             case_when(
+               model_name %in% c("(truth)", "null") ~ Inf,
+               TRUE ~ as.numeric(min(ranking)))) %>%
     ungroup()
   
   results;

@@ -1,7 +1,7 @@
 ---
-title: "Assessment of Predictive Models"
+title: "Assessing Prediction Models"
 author: "https://github.com/psboonstra/prediction-lecture"
-date: "BDSI 2021; Univeristy of Michigan"
+date: "BDSI 2022; University of Michigan"
 geometry: margin=0.5in
 output: 
   ioslides_presentation:
@@ -97,29 +97,33 @@ Use 'mean squared prediction error' (MSPE) for now: $(Y - \hat Y(x))^2$
 
 ## Numeric example (binary outcome)
 
+- Generate $Y$ from logistic regression model: $\Pr(Y = 1|X=x) =  1/(1+\exp(-\alpha+ x\beta))$
+- One observation consists of $\{Y, x\}$
 - $n = 100$ observations each in training and validation
 - $p = 40$ covariates, distributed as independent normal random variables
 - $p/2 = 20$ of coefficients equal to 0.25; remaining equal to 0
 - Expected prevalence of about 0.6
 - $\hat Y(x)=\hat{\Pr}(Y=1|X=x) = 1/(1+\exp(-\hat\alpha+ x\hat\beta))$
 
+## 
+
 ```{r, include = TRUE, cache = TRUE}
 set.seed(7201969);
 #n = 200 observations; split into equal parts
 n <- 200;
-training_subset = 1:round(n/2);
-validation_subset = (round(n/2)+1):n;
+training_subset <- 1:round(n/2);
+validation_subset <- (round(n/2)+1):n;
 #p covariates
 p <- 40;
 #baseline prevalence approximately 0.6
-intercept = log(0.6/0.4);
+alpha <- log(0.6/0.4);
 #normally distributed covariates
 x <- matrix(rnorm(n*p), 
             nrow = n, 
             dimnames = list(NULL,glue("x{1:p}")));
 #half of covariates have odds ratios exp(0.25) 
 beta <- c(rep(0.25, floor(p/2)), numeric(ceiling(p/2)));
-true_probs <- 1/(1+exp(-intercept - drop(x%*%beta)));
+true_probs <- 1/(1+exp(-alpha - drop(x%*%beta)));
 y <- rbinom(n, 1, true_probs);
 all_data <- bind_cols(y = y, data.frame(x));
 full_fmla <- 
@@ -141,11 +145,11 @@ add in covariates that seem to improve fit
 subtract covariates that seem to harm fit
 
 ```{r, include = TRUE, cache = TRUE}
-full_model = glm(full_fmla,
+full_model <- glm(full_fmla,
                  data = all_data,
                  subset = training_subset, 
                  family = "binomial");
-null_model = glm(y ~ 1,
+null_model <- glm(y ~ 1,
                  data = all_data,
                  subset = training_subset, 
                  family = "binomial");
@@ -275,13 +279,13 @@ Assuming we report pruned forward model as *the* model, is this the MSPE we shou
 - 7 coefficients equal to 0.25; remaining 8 equal to 0
 - Expected prevalence of about 0.6
 - $\hat Y(x)=\hat{\Pr}(Y=1|X=x) = 1/(1+\exp(-\hat\alpha - x\hat\beta))$
-- 2500 simulated datasets
+- 2000 simulated datasets
 - In each simulated dataset, only three models are taken to the testing step: the true and null models (for benchmarking) and whichever other model has best validation MSPE
 
 
 ```{r, include = TRUE, cache = TRUE}
 source("simulator.R");
-all_results <- run_sim(seed = 7201969);
+all_results <- run_sim(seed = 7201969)
 ```
 
 ```{r, include = TRUE, cache = TRUE}
@@ -305,18 +309,19 @@ ggplot(observed_results) +
                    y = mspe, 
                    color = model_name), 
                fill = "#AAAAAAAA",
+               outlier.shape = NA,
                varwidth = FALSE) + 
   geom_hline(yintercept = 0.25) + 
   scale_color_manual(values = model_colors) + 
   labs(x = "", y = "MSPE",  color = "Strategy") + 
-  theme(text = element_text(size = 18), 
+  theme(text = element_text(size = 22), 
         legend.position = "top");
 ```
 
 ##
 
 ```{r, fig.height = 1.4*fig.y, fig.width = fig.x, cache = TRUE}
-foo = 
+change_in_optimism <- 
   observed_results %>%
   dplyr::select(-row_number) %>%
   pivot_wider(names_from = step, values_from = mspe) %>%
@@ -332,17 +337,18 @@ foo =
                                    "testing_minus_validation"), 
                         labels = c("training to validation", 
                                    "validation to testing")));
-ggplot(foo) + 
+ggplot(change_in_optimism) + 
   geom_boxplot(aes(x = delta, 
                    y = value,
                    color = model_name), 
                fill = "#AAAAAAAA",
+               outlier.shape = NA,
                varwidth = FALSE) + 
   scale_color_manual(values = model_colors) + 
   labs(x = "",
        y = "Optimism (change in MSPE)", 
        color = "Strategy") + 
-  theme(text = element_text(size = 18), 
+  theme(text = element_text(size = 22), 
         legend.position = "top");
 
 ```
@@ -385,7 +391,7 @@ $\hat Y(x)=\hat{\Pr}(Y=1|X=x)$
 ## Error functions against $\hat Y(x)$ when $Y=1$
 
 ```{r, fig.height = 1.25*fig.y, fig.width = fig.x, cache = T}
-prob_seq = seq(0.01, 1, by = 0.001);#
+prob_seq <- seq(0.01, 1, by = 0.001);#
 ggplot() + 
   geom_path(aes(x = prob_seq, y = (1-prob_seq)^2, color = "1Quadratic"), size = 1) + 
   geom_path(aes(x = prob_seq, y = abs(1-prob_seq), color = "2Absolute"), size = 1) +
@@ -397,7 +403,7 @@ ggplot() +
   labs(x = expression(hat(Y(x))),
        y = "", 
        color = "Loss") + 
-  theme(text = element_text(size = 18), 
+  theme(text = element_text(size = 22), 
         legend.position = "top");
 ```
 
@@ -414,6 +420,14 @@ to $\sum_i Y_i$
 "Did the observations in which the outcome occured have a higher predicted risk than 
 the observations in which the outcome did not occur?"
 
+*Sensitivity*: probability of predicting $\hat Y(x)=1$ given that, in truth, $Y(x)=1$
+
+  * it is not the probability that $Y(x)=1$ given that we've predicted $\hat Y(x)=1$
+
+*Specificity*: probability of predicting $\hat Y(x)=0$ given that, in truth, $Y(x)=0$
+
+  * same caution as above
+
 *Receiver operator characteristic (ROC) curve*: plot of $\hat{\mathrm{sens}}(t)$ versus 
 $1-\hat{\mathrm{spec}}(t)$ for $t\in[0,1]$, where 
 
@@ -423,34 +437,36 @@ $1-\hat{\mathrm{spec}}(t)$ for $t\in[0,1]$, where
 
 *concordance ($c$) index* : $\dfrac{\sum_{i,j:Y_i=0,Y_j=1} 1_{[\hat Y(x_i) < \hat Y(x_j)]} + 0.5\times 1_{[\hat Y(x_i) = \hat Y(x_j)]}}{ \sum_{i,j:Y_i=0,Y_j=1} 1}$
 
+##
+
 ```{r, cache = TRUE}
 # use pROC package 
-true_training_roc = 
+true_training_roc <- 
   predict_models %>% 
   filter(training, model_name == "true_probs") %>% 
   roc(response = y, predictor = value)
 
-true_validation_roc = 
+true_validation_roc <- 
   predict_models %>% 
   filter(!training, model_name == "true_probs") %>% 
   roc(response = y, predictor = value)
 
-full_training_roc = 
+full_training_roc <- 
   predict_models %>% 
   filter(training, model_name == "full") %>% 
   roc(response = y, predictor = value)
 
-full_validation_roc = 
+full_validation_roc <- 
   predict_models %>% 
   filter(!training, model_name == "full") %>% 
   roc(response = y, predictor = value)
 
-forward_pruned_training_roc = 
+forward_pruned_training_roc <- 
   predict_models %>% 
   filter(training, model_name == "forward_pruned") %>% 
   roc(response = y, predictor = value)
 
-forward_pruned_validation_roc = 
+forward_pruned_validation_roc <- 
 predict_models %>% 
   filter(!training, model_name == "forward_pruned") %>% 
   roc(response = y, predictor = value)
@@ -522,7 +538,7 @@ roc_plot <-
                         values = c("dashed", "solid")) + 
   scale_color_manual(name = "Model",
                      values = model_colors[c(1,3)]) + 
-  theme(text = element_text(size = 18));
+  theme(text = element_text(size = 22));
 roc_plot;
 ```
 
@@ -532,7 +548,7 @@ For the full model:
 
 - For fixed specificity of 0.8, can plausibly expect sensitivity of about 0.4
 
-- If we classify based upon cutoff of $\hat Y(x) > 0.5$ versus $\hat Y(x) \leq 0.5$,we would expect sensitivity ~0.6 and specificty ~0.55
+- If we classify based upon cutoff of $\hat Y(x) > 0.5$ versus $\hat Y(x) \leq 0.5$,we would expect sensitivity ~0.6 and specificity ~0.55
 
 - Achieving high sensitivity is difficult without sacrificing specificity
 
@@ -546,7 +562,7 @@ However, it has been shown that the *area under the ROC curve* is, in the case o
 
 $$\dfrac{\sum_{i,j:Y_i=0,Y_j=1} 1_{[\hat Y(x_i) < \hat Y(x_j)]}}{ \sum_{i,j:Y_i=0,Y_j=1} 1}$$
 
-This estimate the probability of correctly ordering, or discriminating between, a randomly selected outcome and randomly selected non-outcome. 
+This estimates the probability of correctly ordering the risk of a randomly selected outcome and randomly selected non-outcome. 
 
 ## AUC
 
@@ -571,7 +587,7 @@ ggplot(filter(roc_data, model == "forward_pruned", step == "validation")) +
                      breaks = seq(0, 1, length = 11), 
                      labels = formatC(seq(0, 1, length = 11), format = "g", digits = 1), 
                      expand = expand_scale(add = 0)) +
-  theme(text = element_text(size = 18), 
+  theme(text = element_text(size = 22), 
         legend.position = "none");
 ```
 
@@ -606,7 +622,7 @@ ggplot(filter(roc_data, model == "forward_pruned", step == "validation")) +
                      breaks = seq(0, 1, length = 11), 
                      labels = formatC(seq(0, 1, length = 11), format = "g", digits = 1),
                      expand = expand_scale(add = 0)) +
-  theme(text = element_text(size = 18), 
+  theme(text = element_text(size = 22), 
         legend.position = "none");
 ```
 
@@ -638,12 +654,13 @@ what they think they mean:
 * Does this refer to validation (model selection) or testing (model assessment)?
 * How was validation measured?
 * If cross-validation was involved, was it done properly?
-* The set of models considered was sensible
+* Was the set of models considered sensible?
 * What population did validation and testing occur in?
 
 ## Summary thoughts on model assessment
 
-The effective region for improvement, especially in binary outcome models, is often quite narrow (difference between null and true models)
+The effective region for improvement (difference between null and true models)
+is often narrow, especially in binary outcome models
 
 ## References
 \footnotesize
