@@ -2,9 +2,9 @@
 
 run_sim = function(seed = NA,
                    nsim = 2e3,
-                   n = 400,
-                   p = 15,
-                   relative_weights = c(2,1,9)) {
+                   n = 300,
+                   p = 20,
+                   relative_weights = c(1,1,1)) {
   
   require(MASS);
   require(tidyverse);
@@ -63,7 +63,7 @@ run_sim = function(seed = NA,
       stepAIC(null_model,
               scope = list(upper = full_fmla),
               direction = "forward",
-              steps = max(1, floor(proportions[1] * n / 10)),
+              steps = max(1, floor(proportions[1] * n / 20)),
               trace = F);
     
     full_model = glm(full_fmla,
@@ -142,7 +142,7 @@ run_sim = function(seed = NA,
   results <- 
     results %>% 
     group_by(sim) %>% 
-    mutate(ranking = rank(mspe / (!model_name %in% c("(truth)", "null")) / (step == "validation"), ties.method = "random")) %>%
+    mutate(ranking = rank(mspe / (!model_name %in% c("(truth)", "null")) / (step == "validation"), ties.method = "average")) %>%
     group_by(sim, model_name) %>%
     mutate(ranking = 
              case_when(
