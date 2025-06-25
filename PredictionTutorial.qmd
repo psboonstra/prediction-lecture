@@ -36,13 +36,7 @@ knitr::knit_hooks$set(mysize = function(before, options, envir) {
     return(options$size);
 })
 options(digits = 3);
-figure_scaler = 1/2;#1/2-3/8 for ioslides; ~1/3 for word, pdf
-text_scaler = 3/3;#1 for ioslides; 2/3 for word, pdf
-fig.x = 16 * figure_scaler;
-fig.y = 9 * figure_scaler;
-cex_scale = 9 * figure_scaler;
-theme_set(theme_bw())
-
+code_flag = FALSE
 ```
 
 
@@ -94,7 +88,7 @@ breast_dx <-
   #       contains("_worst")) 
   dplyr::select(-id, -diagnosis)
 set.seed(1)
-fold_partition <- sample(c(rep(1, 200), rep(2, 200), rep(3, 169)))
+fold_partition <- sample(c(rep(1, 300), rep(2, 135), rep(3, 134)))
 training_index <- which(fold_partition == 1);
 validation_index <- which(fold_partition == 2);
 test_index <- which(fold_partition == 3);
@@ -138,11 +132,11 @@ library(logistf);#logistf
 library(glmnet);#glmnet
 library(glmnetUtils);#formula interface for glmnet
 
-# 200 randomly selected observations for training
+# 300 randomly selected observations for training
 breast_dx_train <- read_csv("https://raw.githubusercontent.com/psboonstra/prediction-lecture/refs/heads/main/breast_dx_train.csv")
-# 200 randomly selected observations for validation
+# 135 randomly selected observations for validation
 breast_dx_validation <- read_csv("https://raw.githubusercontent.com/psboonstra/prediction-lecture/refs/heads/main/breast_dx_validation.csv")
-# 169 remaining observations for testing
+# 134 remaining observations for testing
 breast_dx_test <- read_csv("https://raw.githubusercontent.com/psboonstra/prediction-lecture/refs/heads/main/breast_dx_test.csv")
 
 # Build your model...
@@ -156,6 +150,25 @@ test_predictions <-
 roc(response = breast_dx_test$malignant, 
     predictor = test_predictions)
 
+```
+
+## Results
+
+```{r}
+#| eval: !expr code_flag
+#| echo: !expr code_flag
+
+library(readxl)
+resps <- 
+  read_xlsx("BCa Diagnosis (Responses).xlsx") %>%
+  pivot_longer(cols = -Timestamp) 
+
+ggplot(resps, aes(x = value)) +
+  geom_boxplot() +
+  geom_point(data = resps %>% group_by(name) %>% filter(value == min(value)), y = 0, color = "red") +
+  facet_wrap(vars(name), scales = "free") +
+  scale_y_continuous(breaks = NULL)
+  
 ```
 
 
