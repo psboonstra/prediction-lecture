@@ -1,8 +1,8 @@
 
 
 run_sim = function(seed = NA,
-                   nsim = 2e3,
-                   n = 300,
+                   nsim = 500,
+                   n = 600,
                    p = 20,
                    relative_weights = c(1,1,1)) {
   
@@ -10,6 +10,9 @@ run_sim = function(seed = NA,
   require(tidyverse);
   require(broom);
   require(glue);
+  require(logistf);
+  require(glmnet);
+  require(glmnetUtils);
   
   if(!is.na(seed)) {
     set.seed(seed);
@@ -23,12 +26,15 @@ run_sim = function(seed = NA,
   beta <- c(rep(0.25, floor(p/2)), numeric(ceiling(p/2)));
   
   model_order = 
-    c("(truth)","null","full","forward","forward_pruned", "backward");
+    c("(truth)","null","full","forward","forward_pruned", "backward", "firth", "lasso");
   results = 
     expand_grid(sim = 1:nsim, 
                 model_name = model_order, 
                 step = c("training", "validation", "testing"), 
-                mspe = NA_real_) %>%
+                mspe = NA_real_, 
+                absolute = NA_real_,
+                zero_one = NA_real_,
+                deviance = NA_real_) %>%
     mutate(row_number = 1:n()) %>%
     mutate(model_name = factor(model_name, levels = model_order), 
            step = factor(step, levels = c("training", "validation", "testing")))
@@ -36,8 +42,9 @@ run_sim = function(seed = NA,
   #simulating all data one time, outside of the for-loop, is faster than 
   #simulating at each step
   all_x <- matrix(rnorm(nsim*n*p), 
-                  nrow = n * nsim, 
-                  dimnames = list(NULL,glue("x{1:p}")));
+                  nrow = n * nsim);
+  all_x <- all_x %*% chol(0.1 + diag(0.9, p));
+  colnames(all_x) <- glue("x{1:p}");
   all_true_probs <- 1/(1 + exp(-intercept - all_x%*%beta));
   all_y <- rbinom(n*nsim, 1, all_true_probs);
   all_data <- bind_cols(y = all_y, data.frame(all_x));
@@ -63,7 +70,7 @@ run_sim = function(seed = NA,
       stepAIC(null_model,
               scope = list(upper = full_fmla),
               direction = "forward",
-              steps = max(1, floor(proportions[1] * n / 20)),
+              steps = max(1, floor(proportions[1] * n / 25)),
               trace = F);
     
     full_model = glm(full_fmla,
@@ -76,25 +83,43 @@ run_sim = function(seed = NA,
               direction = "backward",
               trace = F);
     
+    firth_model <-
+      logistf(full_fmla, 
+              data = slice(all_data, training_subset))
+    
+    lasso_model <- 
+      cv.glmnet(full_fmla, 
+                data = all_data,
+                subset = training_subset, 
+                family = "binomial", alpha = 1)
+    
     
     predict_models <- 
       list(null = null_model, 
            full = full_model, 
            forward = forward_model, 
            forward_pruned = forward_pruned_model, 
-           backward = backward_model) %>%
-      map_dfc(predict, newdata = all_data[(i-1)*n + (1:n),], type = 'resp') %>%
+           backward = backward_model, 
+           firth = firth_model, 
+           lasso = lasso_model) %>%
+      map(predict, newdata = all_data[(i-1)*n + (1:n),], type = 'resp') %>%
+      map(as.numeric) %>%
+      bind_cols() %>%
       mutate(`(truth)` = all_true_probs[(i-1)*n + (1:n)],
              y = curr_y, 
              training = row_number() %in% training_subset,
              validation = row_number() %in% validation_subset, 
              testing = row_number() %in% testing_subset, 
              sim = i) %>%
-      pivot_longer(c(`(truth)`, null:backward),
+      pivot_longer(c(`(truth)`, null:lasso),
                    names_to = "model_name") %>%
       mutate(model_name = factor(model_name, levels = model_order)) %>%
       group_by(sim, model_name, training, validation, testing) %>% 
-      summarize(mspe = mean((y - value)^2), .groups = "drop")
+      summarize(mspe = mean((y - value)^2),
+                absolute = mean(abs(y - value)), 
+                zero_one = mean((1-y) * (value >= 0.5) + y * (value < 0.5)), 
+                deviance = mean(-2 * (1-y) * log(1-value) - 2 * y * log(value)),
+                .groups = "drop")
     
     #Training
     curr_training_index = 
@@ -102,11 +127,11 @@ run_sim = function(seed = NA,
       filter(sim == i, step == "training") %>%
       pull(row_number)
     
-    results[curr_training_index,"mspe"] =
+    results[curr_training_index, c("mspe", "absolute", "zero_one", "deviance")] =
       predict_models %>% 
       filter(training) %>%
       arrange(model_name) %>% 
-      pull(mspe)
+      dplyr::select(mspe, absolute, zero_one, deviance)
     
     
     #Validation
@@ -115,11 +140,11 @@ run_sim = function(seed = NA,
       filter(sim == i, step == "validation") %>%
       pull(row_number)
     
-    results[curr_validation_index,"mspe"] =
+    results[curr_validation_index, c("mspe", "absolute", "zero_one", "deviance")] =
       predict_models %>% 
       filter(validation) %>%
       arrange(model_name) %>% 
-      pull(mspe)
+      dplyr::select(mspe, absolute, zero_one, deviance)
     
     #Testing
     curr_testing_index = 
@@ -127,11 +152,11 @@ run_sim = function(seed = NA,
       filter(sim == i, step == "testing") %>%
       pull(row_number)
     
-    results[curr_testing_index,"mspe"] =
+    results[curr_testing_index, c("mspe", "absolute", "zero_one", "deviance")] =
       predict_models %>% 
       filter(testing) %>%
       arrange(model_name) %>% 
-      pull(mspe)
+      dplyr::select(mspe, absolute, zero_one, deviance)
     
     #Selection / ranking based on validation step
     #results[curr_row_index[-c(1,2,7,8,13,14)],"ranking"] = 
@@ -142,12 +167,12 @@ run_sim = function(seed = NA,
   results <- 
     results %>% 
     group_by(sim) %>% 
-    mutate(ranking = rank(mspe / (!model_name %in% c("(truth)", "null")) / (step == "validation"), ties.method = "average")) %>%
+    mutate(mspe_ranking = rank(mspe / (!model_name %in% c("(truth)", "null")) / (step == "validation"), ties.method = "average")) %>%
     group_by(sim, model_name) %>%
-    mutate(ranking = 
+    mutate(mspe_ranking = 
              case_when(
                model_name %in% c("(truth)", "null") ~ Inf,
-               TRUE ~ as.numeric(min(ranking)))) %>%
+               TRUE ~ as.numeric(min(mspe_ranking)))) %>%
     ungroup()
   
   results;

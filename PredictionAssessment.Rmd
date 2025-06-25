@@ -1,7 +1,7 @@
 ---
-title: "Assessing Prediction Models"
+title: "Prediction Models: Lecture"
 author: "https://github.com/psboonstra/prediction-lecture"
-date: "BDSI 2024; University of Michigan"
+date: "BDSI 2025; University of Michigan"
 geometry: margin=0.5in
 output: 
   ioslides_presentation:
@@ -27,6 +27,9 @@ library(tidyverse);
 library(broom);
 library(RColorBrewer);
 library(pROC);
+library(logistf);
+library(glmnet);
+library(glmnetUtils)
 knitr::opts_chunk$set(echo = T, warning = F, message = F, cache = F);
 knitr::knit_hooks$set(mysize = function(before, options, envir) {
   if (before) 
@@ -109,18 +112,19 @@ Use 'mean squared prediction error' (MSPE) for now: $(Y - \hat Y(x))^2$
 
 ```{r, include = TRUE}
 set.seed(7201969);
-#n = 200 observations; split into equal parts
-n <- 200;
-training_subset <- 1:round(n/2);
-validation_subset <- (round(n/2)+1):n;
+#n = 400 observations; 1:1 for training:validation
+n <- 400;
+training_subset <- 1:round(n / 2);
+validation_subset <- (round(n / 2) + 1):n;
 #p covariates
 p <- 20;
 #baseline prevalence approximately 0.6
-alpha <- log(0.6/0.4);
-#normally distributed covariates
+alpha <- log(0.6/0.4); #0.405
+#normally distributed covariates, correlation 0.1
 x <- matrix(rnorm(n*p), 
-            nrow = n, 
-            dimnames = list(NULL,glue("x{1:p}")));
+            nrow = n);
+x <- x %*% chol(0.1 + diag(0.9, p))
+colnames(x) <- glue("x{1:p}")
 #half of covariates have odds ratios exp(0.25) 
 beta <- c(rep(0.25, floor(p/2)), numeric(ceiling(p/2)));
 true_probs <- 1/(1+exp(-alpha - drop(x%*%beta)));
@@ -133,26 +137,27 @@ full_fmla <-
 
 ##
 
-Six strategies considered:
+Eight strategies considered:
 
 - True model ('(truth)'; for benchmarking)
 - Intercept only ('null'; not considered for selection)
 - All covariates ('full')
 - Forward selection ('forward'): start with the null model, incrementally
 add in covariates that seem to improve fit
-- Forward selection with max of 1 variable / 20 observations in training data ('forward_pruned')
-- Backward selection ('backward'): start will the full model, incrementally
-subtract covariates that seem to harm fit
+- Forward selection with max of 1 variable / 25 observations in training data ('forward_pruned')
+- Backward selection ('backward'): start will the full model, incrementally subtract covariates that seem to harm fit
+- Logistic regression with firth penalty ('firth'): penalized logistic regression
+- Logistic regression with lasso penalty
 
 ```{r, include = TRUE}
 full_model <- glm(full_fmla,
-                 data = all_data,
-                 subset = training_subset, 
-                 family = "binomial");
+                  data = all_data,
+                  subset = training_subset, 
+                  family = "binomial");
 null_model <- glm(y ~ 1,
-                 data = all_data,
-                 subset = training_subset, 
-                 family = "binomial");
+                  data = all_data,
+                  subset = training_subset, 
+                  family = "binomial");
 
 #forward selection (using MASS package)
 forward_model <- 
@@ -161,12 +166,12 @@ forward_model <-
           direction = "forward",
           trace = F);
 
-#pruned forward selection: max of 1 coefficient per 10 training observations 
+#pruned forward selection: max of 1 coefficient per 25 training observations 
 forward_pruned_model <- 
   stepAIC(null_model,
           scope = list(upper = full_fmla),
           direction = "forward",
-          steps = max(1, floor(training_subset / 20)),
+          steps = max(1, floor(length(training_subset) / 25)),
           trace = F);
 
 #backward selection
@@ -174,6 +179,18 @@ backward_model <-
   stepAIC(full_model,
           direction = "backward",
           trace = F);
+
+# Firth logistic regression
+firth_model <-
+  logistf(full_fmla, 
+          data = slice(all_data, training_subset))
+
+# Lasso regression
+lasso_model <- 
+  cv.glmnet(full_fmla, 
+            data = all_data,
+            subset = training_subset, 
+            family = "binomial", alpha = 1)
 
 ```
 
@@ -184,7 +201,9 @@ tidy(full_model) %>%
   left_join(tibble(term = glue("x{1:floor(p/2)}"), 
                    nonzero = 1)) %>%
   mutate(nonzero = replace_na(nonzero, 0)) %>%
-  arrange(p.value);
+  filter(term != "(Intercept)") %>%
+  arrange(p.value) %>%
+  print(n = Inf);
 ```
 
 ##
@@ -194,7 +213,9 @@ tidy(forward_model) %>%
   left_join(tibble(term = glue("x{1:floor(p/2)}"), 
                    nonzero = 1)) %>%
   mutate(nonzero = replace_na(nonzero, 0)) %>%
-  arrange(p.value);
+  filter(term != "(Intercept)") %>%
+  arrange(p.value) %>%
+  print(n = Inf);
 ```
 
 ## 
@@ -203,7 +224,9 @@ tidy(forward_pruned_model) %>%
   left_join(tibble(term = glue("x{1:floor(p/2)}"), 
                    nonzero = 1)) %>%
   mutate(nonzero = replace_na(nonzero, 0)) %>%
-  arrange(p.value);
+  filter(term != "(Intercept)") %>%
+  arrange(p.value) %>%
+  print(n = Inf);
 ```
 
 ## 
@@ -213,7 +236,33 @@ tidy(backward_model) %>%
   left_join(tibble(term = glue("x{1:floor(p/2)}"), 
                    nonzero = 1)) %>%
   mutate(nonzero = replace_na(nonzero, 0)) %>%
-  arrange(p.value);
+  filter(term != "(Intercept)") %>%
+  arrange(p.value) %>%
+  print(n = Inf);
+```
+
+## 
+
+```{r, echo = TRUE, include = TRUE}
+tibble(term = firth_model$terms, estimate = firth_model$coefficients, p.value = firth_model$prob) %>%
+  left_join(tibble(term = glue("x{1:floor(p/2)}"), 
+                   nonzero = 1)) %>%
+  mutate(nonzero = replace_na(nonzero, 0)) %>%
+  filter(term != "(Intercept)") %>%
+  arrange(p.value) %>%
+  print(n = Inf);
+```
+
+##
+
+```{r, echo = TRUE, include = TRUE}
+tidy(lasso_model$glmnet.fit, return_zeros = TRUE) %>% filter(lambda == lasso_model$lambda.1se) %>%
+  left_join(tibble(term = glue("x{1:floor(p/2)}"), 
+                   nonzero = 1)) %>%
+  mutate(nonzero = replace_na(nonzero, 0)) %>%
+  filter(term != "(Intercept)") %>%
+  arrange(-abs(estimate)) %>%
+  print(n = Inf);
 ```
 
 ## 
@@ -225,12 +274,16 @@ predict_models <-
        full = full_model, 
        forward = forward_model, 
        forward_pruned = forward_pruned_model, 
-       backward = backward_model) %>%
-  map_dfc(predict, newdata = all_data, type = 'resp') %>%
+       backward = backward_model, 
+       firth = firth_model, 
+       lasso = lasso_model) %>%
+  map(predict, newdata = all_data, type = 'resp') %>%
+  map(as.numeric) %>%
+  bind_cols() %>%
   mutate(true_probs = true_probs,
          y = y, 
          training = row_number() %in% training_subset) %>%
-  pivot_longer(c(true_probs, null:backward),
+  pivot_longer(c(true_probs, null:lasso),
                names_to = "model_name") %>%
   mutate(model_name = factor(model_name) %>% fct_inorder())
 
@@ -238,7 +291,7 @@ predict_models <-
 
 ## Training MSPEs
 
-$\dfrac{1}{100}\sum_{i=1}^{100} (Y_i - \hat Y(x_i))^2$ 
+$\dfrac{1}{200}\sum_{i=1}^{200} (Y_i - \hat Y(x_i))^2$ 
 
 ```{r, include = TRUE}
 predict_models %>% 
@@ -251,7 +304,7 @@ Full model has smallest MSPE in training subset
 
 ## Validation MSPEs
 
-$\dfrac{1}{100}\sum_{i=101}^{200} (Y_i - \hat Y(x_i))^2$ 
+$\dfrac{1}{200}\sum_{i=201}^{400} (Y_i - \hat Y(x_i))^2$ 
 
 ```{r, include = TRUE}
 predict_models %>% 
@@ -260,22 +313,21 @@ predict_models %>%
   summarize(mspe = mean((y - value)^2))
 ```
 
-Except for true and null models, all MSPEs increase dramatically
+Except for true and null models, all MSPEs increase
 
-Pruned forward model has smallest MSPE in validation subset
+Firth model has smallest MSPE in validation subset
 
-- An aside: even though it has the smallest MSPE, is it still good in an 
-absolute sense?
+- An aside: even though it has the smallest MSPE, is it still good in an  absolute sense? What MSPE do we get from using $\hat Y(x_i)\equiv 0.5$?
 
 
 ##
 
-Assuming we report pruned forward model as *the* model, is this the MSPE we should expect in the future?
+Assuming we report firth model as *the* model, is this the MSPE we should expect in the future?
 
 ## Simulation study 
 
-- $n = 100;100;100$ observations in training;validation;testing
-- Same generating model as previously but repeat 2000 times
+- $n = 200;200;200$ observations in training;validation;testing
+- Same generating model as previously but repeat 500 times
 - In each simulated dataset, only three models are taken to the testing step: the true and null models (for benchmarking) and whichever other model has best validation MSPE
 
 
@@ -285,13 +337,11 @@ all_results <- run_sim(seed = 7201969);
 ```
 
 ```{r, include = TRUE}
-print(all_results, n = 18)
-
 observed_results <-
   all_results %>%
   group_by(sim) %>%
   #keep from the test step only the method we would have selected
-  filter(model_name %in% c("(truth)","null") | step != "testing" | ranking == min(ranking)) %>%
+  filter(model_name %in% c("(truth)","null") | step != "testing" | mspe_ranking == min(mspe_ranking)) %>%
   ungroup();
 ```
 
@@ -299,7 +349,7 @@ observed_results <-
 
 
 ```{r, fig.height = 1.4*fig.y, fig.width = fig.x}
-model_colors = c("black",brewer.pal(5, "Dark2"));
+model_colors = c("black",brewer.pal(7, "Dark2"));
 ggplot(observed_results) + 
   geom_boxplot(aes(x = step, 
                    y = mspe, 
@@ -319,14 +369,14 @@ ggplot(observed_results) +
 ```{r, fig.height = 1.4*fig.y, fig.width = fig.x}
 change_in_optimism <- 
   observed_results %>%
-  dplyr::select(-row_number) %>%
+  dplyr::select(-row_number, -absolute, -zero_one, -deviance) %>%
   pivot_wider(names_from = step, values_from = mspe) %>%
   mutate(validation_minus_training = validation - training, 
          testing_minus_validation = testing - validation) %>%
   dplyr::select(-training, -validation, -testing) %>% 
   pivot_longer(cols = contains("minus"), names_to = "delta", values_to = "value") %>%
   group_by(sim) %>%
-  filter(model_name %in% c("(truth)","null") | delta == "validation_minus_training" | ranking == min(ranking)) %>%
+  filter(model_name %in% c("(truth)","null") | delta == "validation_minus_training" | mspe_ranking == min(mspe_ranking)) %>%
   ungroup() %>%
   mutate(delta = factor(delta,
                         levels = c("validation_minus_training",
@@ -403,6 +453,19 @@ ggplot() +
         legend.position = "top");
 ```
 
+## 
+
+```{r}
+predict_models %>%
+  filter(!training) %>%
+  group_by(model_name) %>%
+  summarize(mspe = mean((y - value)^2),
+            abs = mean(abs(y - value)),
+            zero_one = mean((1-y)*1*(value >= 0.5) + y*1*(value < 0.5)),
+            deviance = -2*mean((1-y)*log(1-value) + y*log(value)))
+```
+
+
 ## Calibration 
 
 "Among observations with predicted prevalence of X%, is the true prevalence close to X%?"
@@ -418,11 +481,11 @@ the observations in which the outcome did not occur?"
 
 *Sensitivity*: probability of predicting $\hat Y(x)=1$ given that, in truth, $Y(x)=1$
 
-  * it is not the probability that $Y(x)=1$ given that we've predicted $\hat Y(x)=1$
+* it is not the probability that $Y(x)=1$ given that we've predicted $\hat Y(x)=1$
 
 *Specificity*: probability of predicting $\hat Y(x)=0$ given that, in truth, $Y(x)=0$
 
-  * same caution as above
+* same caution as above
 
 *Receiver operator characteristic (ROC) curve*: plot of $\hat{\mathrm{sens}}(t)$ versus 
 $1-\hat{\mathrm{spec}}(t)$ for $t\in[0,1]$, where 
@@ -447,28 +510,18 @@ true_validation_roc <-
   filter(!training, model_name == "true_probs") %>% 
   roc(response = y, predictor = value)
 
-full_training_roc <- 
+firth_training_roc <- 
   predict_models %>% 
-  filter(training, model_name == "full") %>% 
+  filter(training, model_name == "firth") %>% 
   roc(response = y, predictor = value)
 
-full_validation_roc <- 
+firth_validation_roc <- 
   predict_models %>% 
-  filter(!training, model_name == "full") %>% 
-  roc(response = y, predictor = value)
-
-forward_pruned_training_roc <- 
-  predict_models %>% 
-  filter(training, model_name == "forward_pruned") %>% 
-  roc(response = y, predictor = value)
-
-forward_pruned_validation_roc <- 
-predict_models %>% 
-  filter(!training, model_name == "forward_pruned") %>% 
+  filter(!training, model_name == "firth") %>% 
   roc(response = y, predictor = value)
 
 roc_data <-
-    bind_rows(tibble(model = "(truth)",
+  bind_rows(tibble(model = "(truth)",
                    step = "training", 
                    sens = true_training_roc$sensitivities,
                    spec = true_training_roc$specificities, 
@@ -478,29 +531,19 @@ roc_data <-
                    sens = true_validation_roc$sensitivities,
                    spec = true_validation_roc$specificities, 
                    thresh = true_validation_roc$thresholds),
-            tibble(model = "full",
+            tibble(model = "firth",
                    step = "training", 
-                   sens = full_training_roc$sensitivities,
-                   spec = full_training_roc$specificities, 
-                   thresh = full_training_roc$thresholds),
-            tibble(model = "full",
+                   sens = firth_training_roc$sensitivities,
+                   spec = firth_training_roc$specificities, 
+                   thresh = firth_training_roc$thresholds),
+            tibble(model = "firth",
                    step = "validation", 
-                   sens = full_validation_roc$sensitivities,
-                   spec = full_validation_roc$specificities, 
-                   thresh = full_validation_roc$thresholds),
-            tibble(model = "forward_pruned",
-                   step = "training", 
-                   sens = forward_pruned_training_roc$sensitivities,
-                   spec = forward_pruned_training_roc$specificities, 
-                   thresh = forward_pruned_training_roc$thresholds),
-            tibble(model = "forward_pruned",
-                   step = "validation", 
-                   sens = forward_pruned_validation_roc$sensitivities,
-                   spec = forward_pruned_validation_roc$specificities, 
-                   thresh = forward_pruned_validation_roc$thresholds)) %>%
-  mutate(model = factor(model, levels = c("(truth)","full", "forward_pruned"))) %>%
+                   sens = firth_validation_roc$sensitivities,
+                   spec = firth_validation_roc$specificities, 
+                   thresh = firth_validation_roc$thresholds)) %>%
+  mutate(model = factor(model, levels = c("(truth)", "firth"))) %>%
   group_by(model, step) %>% 
-  mutate(annotate = ifelse(abs(0.5 - thresh) == min(abs(0.5 - thresh)), TRUE, FALSE)) %>%
+  mutate(annotate = ifelse(abs(0.5 - thresh) == min(abs(0.5 - thresh)) & step == "validation", TRUE, FALSE)) %>%
   ungroup() %>%
   arrange(model, step, desc(spec), sens);
 
@@ -510,14 +553,14 @@ roc_data <-
 
 ```{r, fig.height=0.72*fig.x, fig.width=1.05*fig.x}
 roc_plot <- 
-  ggplot(filter(roc_data, model != "forward_pruned"),
+  ggplot(filter(roc_data),
          aes(x = 1 - spec,
              y = sens, 
              color = model, 
              linetype = step)) + 
   geom_path() + 
   geom_abline(intercept = 0, slope = 1) + 
-  geom_label_repel(data = filter(roc_data, annotate, model != "forward_pruned"),
+  geom_label_repel(data = filter(roc_data, annotate),
                    aes(label = paste0("t = ", formatC(thresh, format = "f", digits = 1))),
                    nudge_x = -0.051,
                    nudge_y = 0.051,
@@ -533,18 +576,25 @@ roc_plot <-
   scale_linetype_manual(name = "Step", 
                         values = c("dashed", "solid")) + 
   scale_color_manual(name = "Model",
-                     values = model_colors[c(1,3)]) + 
+                     values = model_colors[c(1,7)]) + 
   theme(text = element_text(size = 22));
 roc_plot;
 ```
 
+## (base ROC plot)
+
+```{r}
+plot(firth_validation_roc)
+```
+
+
 ## Interpreting ROC curve
 
-For the full model:
+For the firth model:
 
-- For fixed specificity of 0.8, can plausibly expect sensitivity of about 0.3
+- For fixed specificity of 0.8, can plausibly expect sensitivity of about 0.45
 
-- If we classify based upon cutoff of $\hat Y(x) > 0.5$ versus $\hat Y(x) \leq 0.5$,we would expect sensitivity ~0.6 and specificity ~0.57
+- If we classify based upon cutoff of $\hat Y(x) > 0.5$ versus $\hat Y(x) \leq 0.5$,we would expect sensitivity ~0.73 and specificity ~0.52
 
 - Achieving high sensitivity is difficult without sacrificing specificity
 
@@ -563,7 +613,7 @@ This estimates the probability of correctly ordering the risk of a randomly sele
 ## AUC
 
 ```{r, echo = FALSE, fig.height=0.72*fig.x, fig.width=0.72*fig.x}
-ggplot(filter(roc_data, model == "forward_pruned", step == "validation")) + 
+ggplot(filter(roc_data, model == "firth", step == "validation")) + 
   geom_path(aes(x = 1 - spec,# 
                 y = sens)) + 
   geom_ribbon(aes(x = 1 - spec,
@@ -571,9 +621,10 @@ ggplot(filter(roc_data, model == "forward_pruned", step == "validation")) +
                   ymax = sens), 
               fill = "#777777") + 
   geom_abline(intercept = 0, slope = 1) + 
-  geom_text(aes(x = 0.8, 
-                y = .2, 
-                label = "AUC"), 
+  geom_text(data = tibble(x = 0.8, y = 0.2, label = "AUC"),
+            aes(x = x, 
+                y = y, 
+                label = label), 
             size = 10) + 
   scale_x_continuous(name = "Spec", 
                      breaks = seq(0, 1, length = 11), 
@@ -592,7 +643,7 @@ ggplot(filter(roc_data, model == "forward_pruned", step == "validation")) +
 ```{r, echo = FALSE, fig.height=0.72*fig.x, fig.width=0.72*fig.x}
 library(grid);library(jpeg);#
 g <- rasterGrob(readJPEG("images/aoc.jpg"), width=unit(1,"npc"), height=unit(1,"npc"), interpolate = FALSE)
-ggplot(filter(roc_data, model == "forward_pruned", step == "validation")) + 
+ggplot(filter(roc_data, model == "firth", step == "validation")) + 
   annotation_custom(g, -Inf, Inf, -Inf, Inf) + 
   geom_path(aes(x = 1 - spec, 
                 y = sens)) + 
@@ -627,13 +678,13 @@ ggplot(filter(roc_data, model == "forward_pruned", step == "validation")) +
 AUCs for '(true)' and 'full' in training step:
 ```{r}
 true_training_roc$auc;
-full_training_roc$auc;
+firth_training_roc$auc;
 ```
 
 AUCs for '(true)' and 'full' in validation step:
 ```{r}
 true_validation_roc$auc;
-full_validation_roc$auc;
+firth_validation_roc$auc;
 ```
 
 What is AUC under the intercept-only (null) model?

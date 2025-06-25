@@ -1,0 +1,17 @@
+---
+title: "BDSI 2025; University of Michigan"
+format: 
+  html:
+    theme: lux
+    fontsize: 1.5em
+    self-contained: true
+    smooth-scroll: true
+editor: source
+---
+
+<!---
+--->
+
+[Lecture](https://psboonstra.github.io/prediction-lecture/slides/PredictionLecture.html#/title-slide)
+
+[Tutorial](https://psboonstra.github.io/prediction-lecture/slides/PredictionTutorial.html#/title-slide)
