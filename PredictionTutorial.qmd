@@ -36,7 +36,7 @@ knitr::knit_hooks$set(mysize = function(before, options, envir) {
     return(options$size);
 })
 options(digits = 3);
-code_flag = FALSE
+code_flag = TRUE
 ```
 
 
@@ -161,17 +161,18 @@ roc(response = breast_dx_test$malignant,
 library(readxl)
 resps <- 
   read_xlsx("BCa Diagnosis (Responses).xlsx") %>%
+  dplyr::select(-Deviance) %>%
   mutate(OneMinusAUC = 1 - AUC, .keep = "unused") %>%
   pivot_longer(cols = -Timestamp) %>%
   mutate(value_pretty = formatC(value, format = "f", digits = 3))
 
 ggplot(resps, aes(x = value)) +
-  geom_boxplot() +
-  geom_point(data = resps %>% group_by(name) %>% filter(value == min(value)), y = 0, color = "red") +
-  geom_label_repel(data = resps %>% group_by(name) %>% filter(value == min(value)), 
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(aes(y = 0), width = 0, height = 0.2) +
+  geom_label_repel(data = resps %>% group_by(name) %>% filter(value == min(value, na.rm = T)), 
                    aes(label = value_pretty), y = 0, nudge_y = 0.1, size = 3, direction = "y") +
   facet_wrap(vars(name), scales = "free") +
-  scale_y_continuous(breaks = NULL)
+  scale_y_continuous(breaks = NULL);
   
 ```
 
