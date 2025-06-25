@@ -1,5 +1,6 @@
 ---
-title: "BDSI 2025; University of Michigan"
+title: "Prediction"
+subtitle: "BDSI 2025; University of Michigan"
 format: 
   html:
     theme: lux
