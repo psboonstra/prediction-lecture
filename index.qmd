@@ -12,6 +12,6 @@ editor: source
 <!---
 --->
 
-[Lecture](https://psboonstra.github.io/prediction-lecture/slides/PredictionLecture.html#/title-slide)
+[Lecture](https://psboonstra.github.io/prediction-lecture/PredictionLecture.html#/title-slide)
 
-[Tutorial](https://psboonstra.github.io/prediction-lecture/slides/PredictionTutorial.html#/title-slide)
+[Tutorial](https://psboonstra.github.io/prediction-lecture/PredictionTutorial.html#/title-slide)

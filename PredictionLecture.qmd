@@ -28,8 +28,8 @@ library(RColorBrewer);
 library(pROC);
 library(logistf);
 library(glmnet);
-library(glmnetUtils)
-knitr::opts_chunk$set(echo = F, warning = F, message = F, cache = F);
+library(glmnetUtils);
+knitr::opts_chunk$set(echo = F, warning = F, message = F, cache = F, `attr-source` = "style='font-size: 1.2em'", `attr-output` = "style='font-size: 0.75em'");
 # See here:https://arelbundock.com/posts/quarto_figures/index.html
 knitr::opts_chunk$set(
   out.width = "70%", # enough room to breath
@@ -76,8 +76,9 @@ code_flag = TRUE;# Set to true and recompile after class
 
 - measuring how good your chosen puzzle building strategy is
 
-@hastie.elements
-
+::: {style="font-size: 75%;"}
+Hastie, Tibshirani, and Friedman (2009)
+:::
 
 ## Two main considerations
 
@@ -362,7 +363,9 @@ observed_results <-
   all_results %>%
   group_by(sim) %>%
   #keep from the test step only the method we would have selected
-  filter(model_name %in% c("(truth)","null") | step != "testing" | mspe_ranking == min(mspe_ranking)) %>%
+  filter(model_name %in% c("(truth)","null") | 
+           step != "testing" | 
+           mspe_ranking == min(mspe_ranking)) %>%
   ungroup();
 ```
 
@@ -420,7 +423,9 @@ change_in_optimism <-
   dplyr::select(-training, -validation, -testing) %>% 
   pivot_longer(cols = contains("minus"), names_to = "delta", values_to = "value") %>%
   group_by(sim) %>%
-  filter(model_name %in% c("(truth)","null") | delta == "validation_minus_training" | mspe_ranking == min(mspe_ranking)) %>%
+  filter(model_name %in% c("(truth)","null") | 
+          delta == "validation_minus_training" | 
+          mspe_ranking == min(mspe_ranking)) %>%
   ungroup() %>%
   mutate(delta = factor(delta,
                         levels = c("validation_minus_training",
@@ -469,9 +474,12 @@ When $Y$ is binary, there are several ways of thinking about 'error'
 (ii) calibration
 (iii) discrimation
 
-@steyerberg.epidemiology 
-
 Model assessment can be based on any sensible, quantifiable error function
+
+::: {style="font-size: 75%;"}
+Steyerberg et al. (2010)
+:::
+
 
 ## Overall prediction error
 
@@ -535,7 +543,7 @@ predict_models %>%
   group_by(model_name) %>%
   summarize(mspe = mean((y - value)^2),
             abs = mean(abs(y - value)),
-            zero_one = mean((1-y)*1*(value >= 0.5) + y*1*(value < 0.5)),
+            zero_one = mean((1-y) * (value >= 0.5) + y * (value < 0.5)),
             deviance = -2*mean((1-y)*log(1-value) + y*log(value)))
 ```
 
@@ -632,9 +640,7 @@ roc_data <-
 
 ```{r}
 #| label: plot4
-#| out-width: 100%
-#| fig-width: 8.57
-
+#| fig-asp: 1
 
 roc_plot <- 
   ggplot(filter(roc_data),
@@ -661,7 +667,8 @@ roc_plot <-
                         values = c("dashed", "solid")) + 
   scale_color_manual(name = "Model",
                      values = model_colors[c(1,7)]) + 
-  theme(text = element_text(size = 22));
+  theme(text = element_text(size = 16), 
+        legend.position = "top");
 roc_plot;
 ```
 
@@ -677,9 +684,26 @@ roc_plot;
 
 ## (base ROC plot)
 
+::: panel-tabset
+### Plot
+
 ```{r}
+#| label: plot4b
+#| out-width: 100%
+#| fig-width: 8.57
+
 plot(firth_validation_roc)
+
 ```
+
+### Code
+
+```{r}
+#| label: plot4b
+#| echo: !expr code_flag
+#| eval: false
+```
+:::
 
 
 ## Interpreting ROC curve
@@ -712,6 +736,8 @@ This estimates the probability of correctly ordering the risk of a randomly sele
 ```{r}
 #| label: plot5
 #| fig-asp: 1
+#| out-width: 50%
+#| fig-width: 4.29
 
 ggplot(filter(roc_data, model == "firth", step == "validation")) + 
   geom_path(aes(x = 1 - spec,# 
@@ -734,7 +760,7 @@ ggplot(filter(roc_data, model == "firth", step == "validation")) +
                      breaks = seq(0, 1, length = 11), 
                      labels = formatC(seq(0, 1, length = 11), format = "g", digits = 1), 
                      expand = expand_scale(add = 0)) +
-  theme(text = element_text(size = 22), 
+  theme(text = element_text(size = 16), 
         legend.position = "none");
 ```
 
@@ -756,6 +782,8 @@ ggplot(filter(roc_data, model == "firth", step == "validation")) +
 ```{r}
 #| label: plot6
 #| fig-asp: 1
+#| out-width: 50%
+#| fig-width: 4.29
 
 library(grid);library(jpeg);#
 g <- rasterGrob(readJPEG("images/aoc.jpg"), width=unit(1,"npc"), height=unit(1,"npc"), interpolate = FALSE)
@@ -785,7 +813,7 @@ ggplot(filter(roc_data, model == "firth", step == "validation")) +
                      breaks = seq(0, 1, length = 11), 
                      labels = formatC(seq(0, 1, length = 11), format = "g", digits = 1),
                      expand = expand_scale(add = 0)) +
-  theme(text = element_text(size = 22), 
+  theme(text = element_text(size = 16), 
         legend.position = "none");
 ```
 
@@ -801,13 +829,13 @@ ggplot(filter(roc_data, model == "firth", step == "validation")) +
 
 ## Higher AUC is better
 
-AUCs for '(true)' and 'full' in training step:
+AUCs for '(true)' and 'firth' in training step:
 ```{r}
 true_training_roc$auc;
 firth_training_roc$auc;
 ```
 
-AUCs for '(true)' and 'full' in validation step:
+AUCs for '(true)' and 'firth' in validation step:
 ```{r}
 true_validation_roc$auc;
 firth_validation_roc$auc;
@@ -836,4 +864,7 @@ The effective region for improvement (difference between null and true models)
 is often narrow, especially in binary outcome models
 
 ## References
-\footnotesize
+
+Hastie, T., Tibshirani, R. and Friedman, J., 2009. The elements of statistical learning.
+
+Steyerberg, E.W., Vickers, A.J., Cook, N.R., Gerds, T., Gonen, M., Obuchowski, N., Pencina, M.J. and Kattan, M.W., 2010. Assessing the performance of prediction models: a framework for traditional and novel measures. Epidemiology, 21(1), pp.128-138.

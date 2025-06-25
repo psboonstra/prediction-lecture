@@ -30,7 +30,7 @@ library(logistf);
 library(glmnet);
 library(glmnetUtils);
 library(ggcorrplot);
-knitr::opts_chunk$set(echo = T, warning = F, message = F, cache = F);
+knitr::opts_chunk$set(echo = T, warning = F, message = F, cache = F, `attr-source` = "style='font-size: 1.2em'", `attr-output` = "style='font-size: 0.75em'");
 knitr::knit_hooks$set(mysize = function(before, options, envir) {
   if (before) 
     return(options$size);
@@ -53,7 +53,10 @@ Digitized image of fine needle aspirate (FNA) of breast mass from 569 patients
 ![](StreetFig2.png){ width=75% }
 
 
-@street.image; @mangasarian.opres
+::: {style="font-size: 75%;"}
+Figure 2, Street (1993)
+:::
+
 
 ##
 
@@ -77,9 +80,9 @@ Data include mean, "standard error", and worst measurements.
 
 About 35% of diagnoses were malignant
 
-## 
+```{r}
+#| echo: false
 
-```{r, include = T, echo = F}
 breast_dx <-
   read_csv("bdiag.csv", show_col_types = FALSE) %>%
   # Translate M/D into 1/0
@@ -102,10 +105,6 @@ write_csv(breast_dx %>% slice(test_index), file = "breast_dx_test.csv")
 ```
 
 
-Original data are available at 
-https://archive.ics.uci.edu/ml/datasets/breast+cancer+wisconsin+(diagnostic)
-
-
 ## 
 
 Task: Build a prediction model to predict probability of being
@@ -120,8 +119,51 @@ we considered, or something else. You can alternatively build a classifier using
 
 4. Evaluate your one model on the test data ('breast_dx_test.csv') and report your performance metrics here: 
 
-https://forms.gle/6kmfzTPok25hi4v26
+<https://forms.gle/6kmfzTPok25hi4v26>
+
+
+## Getting started
+
+Original data are available at 
+<https://archive.ics.uci.edu/ml/datasets/breast+cancer+wisconsin+(diagnostic)>
+
+```{r}
+#| eval: false
+#| echo: true
+
+library(tidyverse) #for read_csv
+library(MASS); #stepAIC
+library(pROC);#pROC
+library(logistf);#logistf
+library(glmnet);#glmnet
+library(glmnetUtils);#formula interface for glmnet
+
+# 200 randomly selected observations for training
+breast_dx_train <- read_csv("https://raw.githubusercontent.com/psboonstra/prediction-lecture/refs/heads/main/breast_dx_train.csv")
+# 200 randomly selected observations for validation
+breast_dx_validation <- read_csv("https://raw.githubusercontent.com/psboonstra/prediction-lecture/refs/heads/main/breast_dx_validation.csv")
+# 169 remaining observations for testing
+breast_dx_test <- read_csv("https://raw.githubusercontent.com/psboonstra/prediction-lecture/refs/heads/main/breast_dx_test.csv")
+
+# Build your model...
+
+# Get predictions from your model with: 
+test_predictions <-
+  predict(my_model, newdata = breast_dx_test, type = "response")
+# Get MSPE, Absolute, 0-1 loss, and deviance using code from lecture
+
+# Get AUC
+roc(response = breast_dx_test$malignant, 
+    predictor = test_predictions)
+
+```
 
 
 ## References
+
+Mangasarian, O.L., Street, W.N. and Wolberg, W.H., 1995. Breast cancer diagnosis and prognosis via linear programming. Operations research, 43(4), pp.570-577.
+
+Street, W.N., Wolberg, W.H. and Mangasarian, O.L., 1993, July. Nuclear feature extraction for breast tumor diagnosis. In Biomedical image processing and biomedical visualization (Vol. 1905, pp. 861-870). SPIE.
+
+
 \scriptsize
